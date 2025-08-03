@@ -34,6 +34,8 @@ distribution.
 
 #include <stdio.h>
 #include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/iosupport.h>
 
 
@@ -207,6 +209,12 @@ ssize_t nocash_write(struct _reent *r, void *fd, const char *ptr, size_t len) {
 //---------------------------------------------------------------------------------
 ssize_t con_write(struct _reent *r,void *fd,const char *ptr, size_t len) {
 //---------------------------------------------------------------------------------
+	PrintConsole *tmpConsole = NULL;
+	if (r->deviceData) {
+		// save currentConsole
+		tmpConsole = currentConsole;
+		currentConsole = r->deviceData;
+	}
 
 	char chr;
 
@@ -328,42 +336,27 @@ ssize_t con_write(struct _reent *r,void *fd,const char *ptr, size_t len) {
 		consolePrintChar(chr);
 	}
 
+	if (tmpConsole) {
+		// restore currentConsole
+		currentConsole = tmpConsole;
+	}
+
 	return count;
 }
 
-static const devoptab_t dotab_stdout = {
-	"con",
-	0,
-	NULL,
-	NULL,
-	con_write,
-	NULL,
-	NULL,
-	NULL
-};
+int consoleCount = 1; // Since con0 already exists
 
+static devoptab_t dotab_stdout = {
+	.name = "con0",
+	.write_r = con_write,
+};
 
 static const devoptab_t dotab_nocash = {
-	"nocash",
-	0,
-	NULL,
-	NULL,
-	nocash_write,
-	NULL,
-	NULL,
-	NULL
+	.name = "nocash",
+	.write_r = nocash_write,
 };
 
-static const devoptab_t dotab_null = {
-	"null",
-	0,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL
-};
+extern const devoptab_t dotab_stdnull; // from newlib/libgloss/libsysbase/iosupport.c
 
 //---------------------------------------------------------------------------------
 void consoleLoadFont(PrintConsole* console) {
@@ -488,6 +481,10 @@ _setUpPalette:
 
 }
 
+int con_open(struct _reent *r, void *fileStruct, const char *path, int flags, int mode) {
+	return 0;
+}
+
 //---------------------------------------------------------------------------------
 PrintConsole* consoleInit(PrintConsole* console, int layer,
 				BgType type, BgSize size,
@@ -501,10 +498,40 @@ PrintConsole* consoleInit(PrintConsole* console, int layer,
 		devoptab_list[STD_OUT] = &dotab_stdout;
 		devoptab_list[STD_ERR] = &dotab_stdout;
 
+		// force con0 to also behave like our custom consoles in con_write
+		dotab_stdout.deviceData = console ? console : currentConsole;
+
 		setvbuf(stdout, NULL , _IONBF, 0);
 		setvbuf(stderr, NULL , _IONBF, 0);
 
 		firstConsoleInit = false;
+
+		// WARNING: Only 16 devoptab_list slots are set to dotab_stdnull, but AddDevice() iterates
+		// through to STD_MAX without null-checking... A PR should be put in for this...
+		// https://github.com/devkitPro/newlib/blob/4cc8767a6067786cbb2da969baff3481bd71461c/libgloss/libsysbase/iosupport.c#L107
+		// Temporarily, just to be safe, I'll fix that problem here.
+		for (int i = 16; i < STD_MAX; ++i)
+			devoptab_list[i] = &dotab_stdnull;
+	} else if (console) {
+		// Make a new device for each new console, so that applications can write
+		// to consoles that are not currently being rendered.
+		// The firstConsoleInit code above won't be changed as to not break existing code.
+		devoptab_t *const dot = malloc(sizeof(devoptab_t));
+		dot->write_r = con_write;
+
+		// Set the name to be `con${consoleNumber}`.
+		const int consoleNumber = consoleCount++;
+		dot->name = strdup("con\0\0");
+		sprintf((char *)dot->name + 3, "%d", consoleNumber);
+
+		// Must set an open() callback. newlib returns ENOSYS if not set:
+		// https://github.com/devkitPro/newlib/blob/4cc8767a6067786cbb2da969baff3481bd71461c/libgloss/libsysbase/open.c#L12
+		dot->open_r = con_open;
+
+		// The important part
+		dot->deviceData = console;
+
+		AddDevice(dot);
 	}
 
 	if(console) {
@@ -570,7 +597,7 @@ void consoleDebugInit(DebugDevice device){
 		devoptab_list[STD_ERR] = &dotab_stdout;
 		break;
 	case DebugDevice_NULL:
-		devoptab_list[STD_ERR] = &dotab_null;
+		devoptab_list[STD_ERR] = &dotab_stdnull;
 		break;
 	}
 	setvbuf(stderr, NULL , buffertype, 0);
