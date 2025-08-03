@@ -344,11 +344,16 @@ ssize_t con_write(struct _reent *r,void *fd,const char *ptr, size_t len) {
 	return count;
 }
 
+int con_open(struct _reent *r, void *fileStruct, const char *path, int flags, int mode) {
+	return 0;
+}
+
 int consoleCount = 1; // Since con0 already exists
 
 static devoptab_t dotab_stdout = {
 	.name = "con0",
 	.write_r = con_write,
+	.open_r = con_open,
 };
 
 static const devoptab_t dotab_nocash = {
@@ -481,10 +486,6 @@ _setUpPalette:
 
 }
 
-int con_open(struct _reent *r, void *fileStruct, const char *path, int flags, int mode) {
-	return 0;
-}
-
 //---------------------------------------------------------------------------------
 PrintConsole* consoleInit(PrintConsole* console, int layer,
 				BgType type, BgSize size,
@@ -498,7 +499,8 @@ PrintConsole* consoleInit(PrintConsole* console, int layer,
 		devoptab_list[STD_OUT] = &dotab_stdout;
 		devoptab_list[STD_ERR] = &dotab_stdout;
 
-		// force con0 to also behave like our custom consoles in con_write
+		// make sure con0 also has the new behavior, in case the application
+		// consoleSelects a different console
 		dotab_stdout.deviceData = console ? console : currentConsole;
 
 		setvbuf(stdout, NULL , _IONBF, 0);
@@ -514,7 +516,7 @@ PrintConsole* consoleInit(PrintConsole* console, int layer,
 			devoptab_list[i] = &dotab_stdnull;
 	} else if (console) {
 		// Make a new device for each new console, so that applications can write
-		// to consoles that are not currently being rendered.
+		// to consoles on different bg layers, just like the Linux VTs.
 		// The firstConsoleInit code above won't be changed as to not break existing code.
 		devoptab_t *const dot = malloc(sizeof(devoptab_t));
 		dot->write_r = con_write;
