@@ -110,6 +110,11 @@ int consoleParseEscapeSequence(const char *ptr, int len) {
 		escapelen++;
 
 		switch (chr) {
+		// Private modes - commonly end in 'h' or 'l'. We won't implement any (yet), so just consume them.
+		case 'h':
+		case 'l':
+			return escapelen;
+
 		// Cursor directional movement
 		case 'A':
 			if (sscanf(escapeseq, "%dA", &parameter) < 1)
