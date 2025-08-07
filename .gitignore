@@ -9,3 +9,4 @@ docs
 warn.log
 *.bz2
 *~
+*.json

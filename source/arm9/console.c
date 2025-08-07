@@ -321,7 +321,7 @@ ssize_t con_write(struct _reent *r,void *fd,const char *ptr, size_t len) {
 						escaping = false;
 						break;
 				}
-			} while (escaping);
+			} while (escaping && i < len);
 			continue;
 		}
 
