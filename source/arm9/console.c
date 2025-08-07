@@ -79,9 +79,11 @@ PrintConsole* consoleGetDefault(void){return &defaultConsole;}
 
 void consolePrintChar(char c);
 
+int consoleParseEscapeSequence(const char *ptr, int len);
+
 
 //---------------------------------------------------------------------------------
-static void consoleCls(char mode) {
+void consoleCls(char mode) {
 //---------------------------------------------------------------------------------
 
 	int i = 0;
@@ -132,7 +134,7 @@ static void consoleCls(char mode) {
 	}
 }
 //---------------------------------------------------------------------------------
-static void consoleClearLine(char mode) {
+void consoleClearLine(char mode) {
 //---------------------------------------------------------------------------------
 
 	int i = 0;
@@ -212,7 +214,6 @@ ssize_t con_write(struct _reent *r,void *fd,const char *ptr, size_t len) {
 
 	int i, count = 0;
 	char *tmp = (char*)ptr;
-	int intensity = 0;
 
 	if(!tmp || len<=0) return -1;
 
@@ -223,106 +224,17 @@ ssize_t con_write(struct _reent *r,void *fd,const char *ptr, size_t len) {
 		chr = *(tmp++);
 		i++; count++;
 
-		if ( chr == 0x1b && *tmp == '[' ) {
-			bool escaping = true;
-			char *escapeseq	= tmp;
-			int escapelen = 0;
-
-			do {
-				chr = *(tmp++);
-				i++; count++; escapelen++;
-				int parameter;
-
-				switch (chr) {
-					/////////////////////////////////////////
-					// Cursor directional movement
-					/////////////////////////////////////////
-					case 'A':
-						siscanf(escapeseq,"[%dA", &parameter);
-						currentConsole->cursorY  =  (currentConsole->cursorY  - parameter) < 0 ? 0 : currentConsole->cursorY  - parameter;
-						escaping = false;
-						break;
-					case 'B':
-						siscanf(escapeseq,"[%dB", &parameter);
-						currentConsole->cursorY  =  (currentConsole->cursorY  + parameter) > currentConsole->windowHeight - 1 ? currentConsole->windowHeight - 1 : currentConsole->cursorY  + parameter;
-						escaping = false;
-						break;
-					case 'C':
-						siscanf(escapeseq,"[%dC", &parameter);
-						currentConsole->cursorX  =  (currentConsole->cursorX  + parameter) > currentConsole->windowWidth - 1 ? currentConsole->windowWidth - 1 : currentConsole->cursorX  + parameter;
-						escaping = false;
-						break;
-					case 'D':
-						siscanf(escapeseq,"[%dD", &parameter);
-						currentConsole->cursorX  =  (currentConsole->cursorX  - parameter) < 0 ? 0 : currentConsole->cursorX  - parameter;
-						escaping = false;
-						break;
-						/////////////////////////////////////////
-						// Cursor position movement
-						/////////////////////////////////////////
-					case 'H':
-					case 'f':
-						siscanf(escapeseq,"[%d;%df", &currentConsole->cursorY , &currentConsole->cursorX );
-						escaping = false;
-						break;
-						/////////////////////////////////////////
-						// Screen clear
-						/////////////////////////////////////////
-					case 'J':
-						consoleCls(escapeseq[escapelen-2]);
-						escaping = false;
-						break;
-						/////////////////////////////////////////
-						// Line clear
-						/////////////////////////////////////////
-					case 'K':
-						consoleClearLine(escapeseq[escapelen-2]);
-						escaping = false;
-						break;
-						/////////////////////////////////////////
-						// Save cursor position
-						/////////////////////////////////////////
-					case 's':
-						currentConsole->prevCursorX  = currentConsole->cursorX ;
-						currentConsole->prevCursorY  = currentConsole->cursorY ;
-						escaping = false;
-						break;
-						/////////////////////////////////////////
-						// Load cursor position
-						/////////////////////////////////////////
-					case 'u':
-						currentConsole->cursorX  = currentConsole->prevCursorX ;
-						currentConsole->cursorY  = currentConsole->prevCursorY ;
-						escaping = false;
-						break;
-						/////////////////////////////////////////
-						// Color scan codes
-						/////////////////////////////////////////
-					case 'm':
-						siscanf(escapeseq,"[%d;%dm", &parameter, &intensity);
-
-						//only handle 30-37,39 and intensity for the color changes
-						parameter -= 30;
-
-						//39 is the reset code
-						if(parameter == 9){
-							parameter = 15;
-						}
-						else if(parameter > 8){
-							parameter -= 2;
-						}
-						else if(intensity){
-							parameter += 8;
-						}
-						if(parameter < 16 && parameter >= 0){
-							currentConsole->fontCurPal = parameter << 12;
-						}
-
-						escaping = false;
-						break;
-				}
-			} while (escaping && i < len);
-			continue;
+		if ( chr == 0x1b && i < len && *tmp == '[' ) {
+			// skip the '['
+			tmp++; i++; count++;
+			// len - i: the REMAINING length in the buffer
+			int consumed = consoleParseEscapeSequence(tmp, len - i);
+			if (consumed > 0) {
+				tmp += consumed;
+				i += consumed;
+				count += consumed;
+				continue;
+			}
 		}
 
 		consolePrintChar(chr);
@@ -381,12 +293,12 @@ void consoleLoadFont(PrintConsole* console) {
 
 		const u8* in = (const u8*)console->font.gfx;
 		u32* out = (u32*)console->fontBgGfx;
-		for (i = 0; i < console->font.numChars * 8; i ++) {
+		for ( i = 0; i < console->font.numChars * 8; i ++) {
 			unsigned cur = *in++;
 
 			int j;
 			u32 temp = 0;
-			for (j = 0; j < 8; j ++) {
+			for ( j = 0; j < 8; j ++) {
 				temp |= ((cur&1) * 0xf) << (j*4);
 				cur >>= 1;
 			}
@@ -408,7 +320,7 @@ void consoleLoadFont(PrintConsole* console) {
 			console->fontCurPal <<= 12;
 		} else {
 
-			for (i = 0; i < console->font.numChars * 16; i++) {
+			for ( i = 0; i < console->font.numChars * 16; i++) {
 				u16 temp = 0;
 
 				if(console->font.gfx[i] & 0xF)
