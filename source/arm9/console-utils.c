@@ -25,6 +25,35 @@ distribution.
 #include <nds/ndstypes.h>
 #include <stdio.h>
 
+/*
+TODO, if it becomes important enough:
+
+don't use the scanf strategy after all, because incomplete sequences written
+to consoles will just be shown raw. to do what every modern terminal (emulator) does,
+we need to implement a state machine with a buffer.
+
+as an example:
+run `cat`, then press the Esc and Enter keys on your keyboard. this does three things:
+1. '\e' is added to cat's input buffer
+2. your terminal reacts to Enter and moves the cursor to the next line
+3. cat sends its input buffer (containing "\e\n" in C string format) to stdout,
+   causing your terminal to:
+   1. recognize the start of an escape sequence (\e)
+   2. move the cursor to the next line (again) (\n)
+then type "[36m" without the quotes. on my terminal emulator (foot), the "[36m"
+was never shown, and everything i typed afterwards was cyan in color. my terminal
+emulator let the \n go through without printing the \e, meaning it did in fact
+store the \e in a buffer, or set a flag indicating that "i should check for the rest
+of the escape sequence", then processed the "[36m", setting the color to cyan.
+
+we should recreate this strategy here as well to handle cases where not all of an
+escape sequence is passed to a single con_write() call.
+
+not to mention: "\e[" is just one type of sequence (known as a control sequence introducer,
+or CSI), but there are also "\e " sequences as well which can do other things. a state
+machine would help here.
+*/
+
 // from console.c
 extern PrintConsole *currentConsole;
 void consoleCls(char mode);
@@ -56,30 +85,45 @@ static void consoleParseColor(const char *escapeseq, int escapelen) {
 		return;
 	}
 
-	// truecolor rgb sequences `ESC[38;2;{r};{g};{b}m` will simply be ignored
+	// ignore truecolor rgb sequences in the form `ESC[38;2;{r};{g};{b}m`
 	if (siscanf(escapeseq, "38;2;%*d;%*d;%*dm") > 0)
 		return;
 
 	unsigned id;
-	// 256 color format sequence `ESC[38;5;{ID}m`
+	// 256 color format sequence: `ESC[38;5;{ID}m`
+	// support it, but just use 0-15, ignore everything else.
 	if (siscanf(escapeseq, "38;5;%um", &id) > 0) {
 		if (id <= 15)
 			currentConsole->fontCurPal = id << 12;
 		return;
 	}
 
-	int color = -1, bright = 0;
+	// -1 color means unchanged
+	int color = -1, bright = 0, items_matched, chars_consumed, param;
 	const char *p = escapeseq;
-	int consumed;
-	int param;
 
-	while ((consumed = siscanf(p, "%d;", &param)) > 0) {
-		p += consumed;
-		updateColorBright(param, &color, &bright);
-	}
+	// %n does not match anything, it stores the number of characters
+	// consumed thus far into the next pointer! use this to advance `p`.
 
-	if (siscanf(p, "%dm", &param) > 0)
+	// start consuming arguments, delimited with ';'
+	do {
+		items_matched = siscanf(p, "%d;%n", &param, &chars_consumed);
+
+		// advance p even if no items were matched!
+		p += chars_consumed;
+
+		if (items_matched)
+			// the %d got matched, param is valid!
+			updateColorBright(param, &color, &bright);
+	} while (items_matched);
+
+	// end of arguments must end with 'm'
+	if (siscanf(p, "%dm%n", &param, &chars_consumed))
+		// the %d got matched, param is valid!
 		updateColorBright(param, &color, &bright);
+
+	// advance p even if no items were matched!
+	p += chars_consumed;
 
 	int final_param = -1;
 	if (color != -1) {
@@ -94,6 +138,11 @@ static void consoleParseColor(const char *escapeseq, int escapelen) {
 		else
 			final_param = current_color;
 	}
+
+	if (final_param == 0)
+		// this is black, and the texture is literally just nothing.
+		// we need a usable console, so make it gray.
+		final_param += 8;
 
 	if (final_param != -1)
 		currentConsole->fontCurPal = final_param << 12;
