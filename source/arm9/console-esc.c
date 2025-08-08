@@ -167,34 +167,24 @@ int consoleParseEscapeSequence(const char *ptr, int len) {
 		case 'A':
 			if (sscanf(escapeseq, "%dA", &parameter) < 1)
 				parameter = 1;
-			// currentConsole->cursorY =
-			// 	(currentConsole->cursorY - parameter) < 0 ? 0 : currentConsole->cursorY - parameter;
 			consoleMoveCursorY(-parameter);
 			return escapelen;
 
 		case 'B':
 			if (sscanf(escapeseq, "%dB", &parameter) < 1)
 				parameter = 1;
-			// currentConsole->cursorY = (currentConsole->cursorY + parameter) > currentConsole->windowHeight - 1
-			// 							  ? currentConsole->windowHeight - 1
-			// 							  : currentConsole->cursorY + parameter;
 			consoleMoveCursorY(parameter);
 			return escapelen;
 
 		case 'C':
 			if (sscanf(escapeseq, "%dC", &parameter) < 1)
 				parameter = 1;
-			// currentConsole->cursorX = (currentConsole->cursorX + parameter) > currentConsole->windowWidth - 1
-			// 							  ? currentConsole->windowWidth - 1
-			// 							  : currentConsole->cursorX + parameter;
 			consoleMoveCursorX(parameter);
 			return escapelen;
 
 		case 'D':
 			if (sscanf(escapeseq, "%dD", &parameter) < 1)
 				parameter = 1;
-			// currentConsole->cursorX =
-			// 	(currentConsole->cursorX - parameter) < 0 ? 0 : currentConsole->cursorX - parameter;
 			consoleMoveCursorX(-parameter);
 			return escapelen;
 
