@@ -291,6 +291,7 @@ void consoleLoadFont(PrintConsole* console) {
 
 		const u8* in = (const u8*)console->font.gfx;
 		u32* out = (u32*)console->fontBgGfx;
+		u32* out2 = (u32*)console->fontBg2Gfx;
 		for ( i = 0; i < console->font.numChars * 8; i ++) {
 			unsigned cur = *in++;
 
@@ -302,6 +303,7 @@ void consoleLoadFont(PrintConsole* console) {
 			}
 
 			*out++ = temp;
+			*out2++ = temp;
 		}
 
 		goto _setUpPalette;
@@ -335,27 +337,28 @@ void consoleLoadFont(PrintConsole* console) {
 
 _setUpPalette:
 			//set up the palette for color printing
-			palette[1 * 16 - 1] = RGB15(0,0,0); //30 normal black
-			palette[2 * 16 - 1] = RGB15(15,0,0); //31 normal red
-			palette[3 * 16 - 1] = RGB15(0,15,0); //32 normal green
-			palette[4 * 16 - 1] = RGB15(15,15,0); //33 normal yellow
+			palette[1 * 16 - 1] = RGB15(0, 0, 0);	// normal black
+			palette[2 * 16 - 1] = RGB15(15, 0, 0);	// normal red
+			palette[3 * 16 - 1] = RGB15(0, 15, 0);	// normal green
+			palette[4 * 16 - 1] = RGB15(15, 15, 0); // normal yellow
 
-			palette[5 * 16 - 1] = RGB15(0,0,15); //34 normal blue
-			palette[6 * 16 - 1] = RGB15(15,0,15); //35 normal magenta
-			palette[7 * 16 - 1] = RGB15(0,15,15); //36 normal cyan
-			palette[8 * 16 - 1] = RGB15(24,24,24); //37 normal white
+			palette[5 * 16 - 1] = RGB15(0, 0, 15);	 // normal blue
+			palette[6 * 16 - 1] = RGB15(15, 0, 15);	 // normal magenta
+			palette[7 * 16 - 1] = RGB15(0, 15, 15);	 // normal cyan
+			palette[8 * 16 - 1] = RGB15(24, 24, 24); // normal white
 
-			palette[9 * 16 - 1 ] = RGB15(15,15,15); //40 bright black
-			palette[10 * 16 - 1] = RGB15(31,0,0); //41 bright red
-			palette[11 * 16 - 1] = RGB15(0,31,0); //42 bright green
-			palette[12 * 16 - 1] = RGB15(31,31,0);	//43 bright yellow
+			palette[9 * 16 - 1] = RGB15(15, 15, 15); // bright black
+			palette[10 * 16 - 1] = RGB15(31, 0, 0);	 // bright red
+			palette[11 * 16 - 1] = RGB15(0, 31, 0);	 // bright green
+			palette[12 * 16 - 1] = RGB15(31, 31, 0); // bright yellow
 
-			palette[13 * 16 - 1] = RGB15(0,0,31); //44 bright blue
-			palette[14 * 16 - 1] = RGB15(31,0,31);	//45 bright magenta
-			palette[15 * 16 - 1] = RGB15(0,31,31);	//46 bright cyan
-			palette[16 * 16 - 1] = RGB15(31,31,31); //47 & 39 bright white
+			palette[13 * 16 - 1] = RGB15(0, 0, 31);	  // bright blue
+			palette[14 * 16 - 1] = RGB15(31, 0, 31);  // bright magenta
+			palette[15 * 16 - 1] = RGB15(0, 31, 31);  // bright cyan
+			palette[16 * 16 - 1] = RGB15(31, 31, 31); // bright white
 
 			console->fontCurPal = 15 << 12;
+			console->fontCurPal2 = 0 << 12;
 		}
 
 	} else if(console->font.bpp == 8) {
@@ -427,12 +430,17 @@ PrintConsole* consoleInit(PrintConsole* console, int layer,
 
 	if(mainDisplay) {
 		console->bgId = bgInit(layer, type, size, mapBase, tileBase);
+		console->bg2Id = bgInit(layer + 1, type, size, mapBase + 1, tileBase);
 	} else {
 		console->bgId = bgInitSub(layer, type, size, mapBase, tileBase);
+		console->bg2Id = bgInitSub(layer + 1, type, size, mapBase + 1, tileBase);
 	}
 
-	console->fontBgGfx = (u16*)bgGetGfxPtr(console->bgId);
-	console->fontBgMap = (u16*)bgGetMapPtr(console->bgId);
+	console->fontBgGfx = bgGetGfxPtr(console->bgId);
+	console->fontBgMap = bgGetMapPtr(console->bgId);
+
+	console->fontBg2Gfx = bgGetGfxPtr(console->bg2Id);
+	console->fontBg2Map = bgGetMapPtr(console->bg2Id);
 
 	console->consoleInitialised = 1;
 
@@ -440,8 +448,6 @@ PrintConsole* consoleInit(PrintConsole* console, int layer,
 
 	if(loadGraphics)
 		consoleLoadFont(console);
-
-	consoleSetCursorChar(219);
 
 	return currentConsole;
 
@@ -503,7 +509,7 @@ PrintConsole* consoleDemoInit(void) {
 //---------------------------------------------------------------------------------
 void newRow() {
 //---------------------------------------------------------------------------------
-	consoleRestoreFbmvUnderCursor();
+	consoleRestoreTileUnderCursor();
 
 	currentConsole->cursorY ++;
 
@@ -524,7 +530,7 @@ void newRow() {
 
 	}
 
-	consoleSaveFbmvUnderCursor();
+	consoleSaveTileUnderCursor();
 }
 
 //---------------------------------------------------------------------------------

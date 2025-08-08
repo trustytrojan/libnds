@@ -53,22 +53,24 @@ or CSI), but there are also "\e " sequences as well which can do other things. a
 machine would help here.
 */
 
-static void updateColorBright(const int param, int *const color, int *const bright) {
+static void updateColorBright(const int param, int *const color, int *const bgcolor, int *const bright) {
 	if (param == 0) { // Reset
-		*color = 15;  // bright white
+		*color = 15;  // fg: bright white
+		*bgcolor = 0; // bg: black
 		*bright = 0;
 	} else if (param == 1) { // Bright/bold
 		*bright = 1;
 	} else if (param >= 30 && param <= 37) { // fg color
 		*color = param - 30;
 	} else if (param >= 40 && param <= 47) { // bg color
-		*color = param - 40;
+		*bgcolor = param - 40;
 	} else if (param >= 90 && param <= 97) { // bright fg color
 		*color = param - 90 + 8;
 	} else if (param >= 100 && param <= 107) { // bright bg color
-		*color = param - 100 + 8;
+		*bgcolor = param - 100 + 8;
 	} else if (param == 39 || param == 49) { // Default color
-		*color = 15;						 // bright white
+		*color = 15;						 // fg: bright white
+		*bgcolor = 0;						 // bg: black
 	}
 }
 
@@ -93,7 +95,7 @@ static void consoleParseColor(const char *escapeseq, int escapelen) {
 	}
 
 	// -1 color means unchanged
-	int color = -1, bright = 0, items_matched, chars_consumed, param;
+	int color = -1, bgcolor = -1, bright = 0, items_matched, chars_consumed, param;
 	const char *p = escapeseq;
 
 	// %n does not match anything, it stores the number of characters
@@ -105,7 +107,7 @@ static void consoleParseColor(const char *escapeseq, int escapelen) {
 
 		if (items_matched > 0) {
 			// the %d got matched, param is valid!
-			updateColorBright(param, &color, &bright);
+			updateColorBright(param, &color, &bgcolor, &bright);
 		}
 
 		// only advance p if items were matched
@@ -115,30 +117,34 @@ static void consoleParseColor(const char *escapeseq, int escapelen) {
 	// end of arguments must end with 'm'
 	if (siscanf(p, "%dm%n", &param, &chars_consumed) > 0) {
 		// the %d got matched, param is valid!
-		updateColorBright(param, &color, &bright);
+		updateColorBright(param, &color, &bgcolor, &bright);
 	}
 
-	int final_param = -1;
+	// handle cases when only bold (1) modifier is used. this only affects foreground.
+	// this should simply turn the current color into its bright variant.
+	int final_color = -1;
 	if (color != -1) {
-		final_param = color;
-		if (bright && final_param < 8)
-			final_param += 8;
+		final_color = color;
+		if (bright && final_color < 8)
+			final_color += 8;
 	} else if (bright) {
 		// if only intensity is set, brighten the current color
 		int current_color = (currentConsole->fontCurPal >> 12);
 		if (current_color < 8)
-			final_param = current_color + 8;
+			final_color = current_color + 8;
 		else
-			final_param = current_color;
+			final_color = current_color;
 	}
 
-	if (final_param == 0)
-		// this is black, and the texture is literally just nothing.
-		// we need a usable console, so make it gray.
-		final_param += 8;
+	// final_param is a 4-bit integer (0-15). this is placed into the
+	// last 4 bits of fontCurPal, which is |'d with the character offset.
+	// this ALSO means we can extract it out of an FBMV by >>'ing 12.
+	// see consoleComputeFontBgMapValue() for reference.
 
-	if (final_param != -1)
-		currentConsole->fontCurPal = final_param << 12;
+	if (final_color != -1)
+		currentConsole->fontCurPal = final_color << 12;
+	if (bgcolor != -1)
+		currentConsole->fontCurPal2 = bgcolor << 12;
 }
 
 int consoleParseEscapeSequence(const char *ptr, int len) {

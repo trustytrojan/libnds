@@ -170,6 +170,10 @@ typedef struct PrintConsole
 	bool loadGraphics;			/*!< True if consoleInit should attempt to load font graphics into background memory */
 
 	bool echo; // Whether to echo characters written to this console, similar to the ECHO termios attribute.
+	int bg2Id; // ID of bg used for ANSI background colors!
+
+	u16 *fontBg2Map, *fontBg2Gfx; // map & gfx for the 2nd bg
+	u16 fontCurPal2; // palette for background colors
 }PrintConsole;
 
 

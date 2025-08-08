@@ -30,14 +30,31 @@ u16 *consoleFontBgMapAt(const int x, const int y) {
 	return c->fontBgMap + xOffset + yOffset;
 }
 
+u16 *consoleFontBg2MapAt(const int x, const int y) {
+	const PrintConsole *const c = currentConsole;
+	const int xOffset = c->cursorX + c->windowX;
+	const int yOffset = (c->cursorY + c->windowY) * c->consoleWidth;
+	return c->fontBg2Map + xOffset + yOffset;
+}
+
 u16 *consoleFontBgMapAtCursor(void) {
 	const PrintConsole *const c = currentConsole;
 	return consoleFontBgMapAt(c->cursorX, c->cursorY);
 }
 
+u16 *consoleFontBg2MapAtCursor(void) {
+	const PrintConsole *const c = currentConsole;
+	return consoleFontBg2MapAt(c->cursorX, c->cursorY);
+}
+
 u16 consoleComputeFontBgMapValue(const char ch) {
 	const PrintConsole *const c = currentConsole;
 	return c->fontCurPal | (u16)(ch + c->fontCharOffset - c->font.asciiOffset);
+}
+
+u16 consoleComputeFontBg2MapValue(const char ch) {
+	const PrintConsole *const c = currentConsole;
+	return c->fontCurPal2 | (u16)(ch + c->fontCharOffset - c->font.asciiOffset);
 }
 
 // could have a better name, since we aren't always printing a character
@@ -57,8 +74,9 @@ void consolePrintChar(const char ch) {
 	if (c->PrintChar && c->PrintChar(c, ch))
 		return;
 
-	if (c->cursorX >= c->windowWidth && c->echo) {
-		c->cursorX = 0;
+	if (c->cursorX >= c->windowWidth) {
+		// c->cursorX = 0;
+		consoleSetCursorX(0);
 		newRow();
 	}
 
@@ -68,31 +86,33 @@ void consolePrintChar(const char ch) {
 		break;
 
 	case '\b':
-	/*
-		the old code here actually moved the cursor back one (and up one row
-		if needed) and then "erased" the character by writing a space to fontBgMap.
+		/*
+			the old code here actually moved the cursor back one (and up one row
+			if needed) and then "erased" the character by writing a space to fontBgMap.
 
-		in a linux terminal emulator with the termios attr ICANON off,
-		backspace does NOT move the cursor. if the ECHO termios attr is on
-		it prints the \b character (visualized as ^?).
+			in a linux terminal emulator with the termios attr ICANON off,
+			backspace does NOT move the cursor. if the ECHO termios attr is on
+			it prints the \b character (visualized as ^?).
 
-		with ICANON and ECHO on, backspace does NOT wrap the cursor around to the
-		last row.
+			with ICANON and ECHO on, backspace does NOT wrap the cursor around to the
+			last row.
 
-		what dkp was trying to do here is emulate "canonical mode"
-		(ICANON termios attr), which tells the terminal to line-buffer
-		input from the keyboard before sending it to stdin. but it ALSO
-		does what WE (the console) were doing here before: erasing the current character
-		and moving the cursor back. THIS SHOULD BE KEYBOARD.C's JOB!
+			what dkp was trying to do here is emulate "canonical mode"
+			(ICANON termios attr), which tells the terminal to line-buffer
+			input from the keyboard before sending it to stdin. but it ALSO
+			does what WE (the console) were doing here before: erasing the current character
+			and moving the cursor back. THIS SHOULD BE KEYBOARD.C's JOB!
 
-		SOLUTION:
-		WE should have an "echo" option, and keyboard.c should have a "line buffer" option.
-		and when keyboard.c's "line buffering" is on, **it should interface with the 
-		currently selected console** to erase the character at the cursor and then move
-		the cursor back.
+			SOLUTION:
+			keyboard.c should have both an "echo" and "line buffer" option.
+			when keyboard.c's "line buffering" is on, **it should interface with the
+			currently selected console** to erase the character at the cursor and then move
+			the cursor back. when "echo" is on, keyboard.c should send what it gets to the
+			console to be ***immediately*** rendered, with non-visual characters visualized.
+			for example, left arrow becomes ^[[D.
 
-		the responsibilities should NOT be mixed together.
-	*/
+			the responsibilities should NOT be mixed together.
+		*/
 
 		if (c->echo)
 			*consoleFontBgMapAtCursor() = consoleComputeFontBgMapValue('\b');
@@ -113,10 +133,12 @@ void consolePrintChar(const char ch) {
 		break;
 
 	default:
-		// c->fontBgMap[c->cursorX + c->windowX + (c->cursorY + c->windowY) * c->consoleWidth] =
-		// c->fontCurPal | (u16)(ch + c->fontCharOffset - c->font.asciiOffset);
-		*consoleFontBgMapAtCursor() = consoleComputeFontBgMapValue(ch);
+		*consoleFontBgMapAtCursor() = consoleComputeFontBgMapValue(ch);	   // fg
+		*consoleFontBg2MapAtCursor() = consoleComputeFontBg2MapValue(219); // bg
+
 		++c->cursorX;
+		consoleSaveTileUnderCursor();
+		consoleDrawCursor();
 		// consoleMoveCursorX(1);
 	}
 }

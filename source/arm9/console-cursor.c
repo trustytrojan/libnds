@@ -23,52 +23,42 @@ distribution.
 ---------------------------------------------------------------------------------*/
 #include "console-priv.h"
 
-static u16 fbmvUnderCursor, cursorFbmv;
-static bool isCursorShown = true;
+// This saves the foreground and background color of
+// whatever tile we just moved on top of.
+// fb2mv should always be the full block ASCII character (219).
+static u16 fbmvUnderCursor, fb2mvUnderCursor;
 
-void consoleSetCursorChar(const char c) {
-	cursorFbmv = consoleComputeFontBgMapValue(c);
+void consoleSaveTileUnderCursor(void) {
+	fbmvUnderCursor = *consoleFontBgMapAtCursor();
+	fb2mvUnderCursor = *consoleFontBg2MapAtCursor();
 }
 
-void consoleSaveFbmvUnderCursor(void) {
-	if (!isCursorShown)
-		fbmvUnderCursor = *consoleFontBgMapAtCursor();
-}
-
-void consoleRestoreFbmvUnderCursor(void) {
+void consoleRestoreTileUnderCursor(void) {
 	*consoleFontBgMapAtCursor() = fbmvUnderCursor;
+	*consoleFontBg2MapAtCursor() = fb2mvUnderCursor;
 }
 
-static void consoleFlashCursor(TickTask *const _) {
-	u16 *const fbmAtCursor = consoleFontBgMapAtCursor();
+void consoleDrawCursor(void) {
+	// foreground: this is the character itself. we need to turn it black,
+	// which would usually be a fontCurPal of (0 << 12). however fbmvUnderCursor
+	// 99% of the time does not have those bits zeroed inside. (who uses black on black?)
+	// so we need to zero-out those bits:
+	// static const u16 BLACK_BITMASK = (u16)(UINT16_MAX << 4) >> 4;
+	*consoleFontBgMapAtCursor() = 0x0fff & fbmvUnderCursor;
 
-	if (isCursorShown) {
-		// "on" state, save the character under the cursor and display the cursor
-		fbmvUnderCursor = *fbmAtCursor;
-		*fbmAtCursor = cursorFbmv;
-	} else {
-		// "off" state, restore the character under the cursor
-		*fbmAtCursor = fbmvUnderCursor;
-	}
-
-	isCursorShown = !isCursorShown;
-}
-
-static TickTask cursorFlashTickTask;
-
-void consoleStartFlashingCursor(const int frequency) {
-	tickTaskStart(&cursorFlashTickTask, consoleFlashCursor, ticksFromHz(frequency), ticksFromHz(frequency));
-}
-
-void consoleStopFlashingCursor(void) {
-	tickTaskStop(&cursorFlashTickTask);
+	// background: just use bright write (15)
+	*consoleFontBg2MapAtCursor() = (15 << 12) | consoleComputeFontBg2MapValue(219);
 }
 
 void consoleSetCursorPos(const int x, const int y) {
-	consoleRestoreFbmvUnderCursor();
+	consoleRestoreTileUnderCursor();
 	currentConsole->cursorX = x;
 	currentConsole->cursorY = y;
-	consoleSaveFbmvUnderCursor();
+	consoleSaveTileUnderCursor();
+
+	// original tile saved! now let's make the cursor visible with
+	// white background and black foreground.
+	consoleDrawCursor();
 }
 
 void consoleSetCursorY(const int y) {

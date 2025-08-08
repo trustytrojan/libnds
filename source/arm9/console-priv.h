@@ -34,22 +34,23 @@ void consoleClearLine(char mode);
 void newRow();
 
 // console-print.c
-u16 *consoleFontBgMapAt(const int x, const int y);
+u16 *consoleFontBgMapAt(int x, int y);
+u16 *consoleFontBg2MapAt(int x, int y);
 u16 *consoleFontBgMapAtCursor(void);
+u16 *consoleFontBg2MapAtCursor(void);
 u16 consoleComputeFontBgMapValue(char);
+u16 consoleComputeFontBg2MapValue(char);
 void consolePrintChar(char);
 
 // console-cursor.c
-void consoleSaveFbmvUnderCursor(void);
-void consoleRestoreFbmvUnderCursor(void);
+void consoleSaveTileUnderCursor(void);
+void consoleRestoreTileUnderCursor(void);
 void consoleMoveCursorX(int dx); // clamps cursorX to windowWidth
 void consoleMoveCursorY(int dy); // clamps cursorY to windowHeight
 void consoleSetCursorX(int x);
 void consoleSetCursorY(int y);
 void consoleSetCursorPos(int x, int y);
-void consoleSetCursorChar(char);
-void consoleStartFlashingCursor(int frequency);
-void consoleStopFlashingCursor(void);
+void consoleDrawCursor(void);
 
 // console-esc.c
 int consoleParseEscapeSequence(const char *ptr, int len);
