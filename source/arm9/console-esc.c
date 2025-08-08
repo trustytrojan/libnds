@@ -21,8 +21,7 @@ must not be misrepresented as being the original software.
 distribution.
 
 ---------------------------------------------------------------------------------*/
-#include <nds/arm9/console.h>
-#include <nds/ndstypes.h>
+#include "console-priv.h"
 #include <stdio.h>
 
 /*
@@ -53,11 +52,6 @@ not to mention: "\e[" is just one type of sequence (known as a control sequence 
 or CSI), but there are also "\e " sequences as well which can do other things. a state
 machine would help here.
 */
-
-// from console.c
-extern PrintConsole *currentConsole;
-void consoleCls(char mode);
-void consoleClearLine(char mode);
 
 static void updateColorBright(const int param, int *const color, int *const bright) {
 	if (param == 0) { // Reset
@@ -109,21 +103,20 @@ static void consoleParseColor(const char *escapeseq, int escapelen) {
 	do {
 		items_matched = siscanf(p, "%d;%n", &param, &chars_consumed);
 
-		// advance p even if no items were matched!
-		p += chars_consumed;
-
-		if (items_matched)
+		if (items_matched > 0) {
 			// the %d got matched, param is valid!
 			updateColorBright(param, &color, &bright);
-	} while (items_matched);
+		}
+
+		// only advance p if items were matched
+		p += chars_consumed;
+	} while (items_matched > 0);
 
 	// end of arguments must end with 'm'
-	if (siscanf(p, "%dm%n", &param, &chars_consumed))
+	if (siscanf(p, "%dm%n", &param, &chars_consumed) > 0) {
 		// the %d got matched, param is valid!
 		updateColorBright(param, &color, &bright);
-
-	// advance p even if no items were matched!
-	p += chars_consumed;
+	}
 
 	int final_param = -1;
 	if (color != -1) {
@@ -164,42 +157,49 @@ int consoleParseEscapeSequence(const char *ptr, int len) {
 		case 'l':
 			return escapelen;
 
-		// Cursor directional movement
+		// Cursor directional movement (TODO: make these use consoleMoveCursorX/Y instead)
 		case 'A':
 			if (sscanf(escapeseq, "%dA", &parameter) < 1)
 				parameter = 1;
-			currentConsole->cursorY =
-				(currentConsole->cursorY - parameter) < 0 ? 0 : currentConsole->cursorY - parameter;
+			// currentConsole->cursorY =
+			// 	(currentConsole->cursorY - parameter) < 0 ? 0 : currentConsole->cursorY - parameter;
+			consoleMoveCursorY(-parameter);
 			return escapelen;
 
 		case 'B':
 			if (sscanf(escapeseq, "%dB", &parameter) < 1)
 				parameter = 1;
-			currentConsole->cursorY = (currentConsole->cursorY + parameter) > currentConsole->windowHeight - 1
-										  ? currentConsole->windowHeight - 1
-										  : currentConsole->cursorY + parameter;
+			// currentConsole->cursorY = (currentConsole->cursorY + parameter) > currentConsole->windowHeight - 1
+			// 							  ? currentConsole->windowHeight - 1
+			// 							  : currentConsole->cursorY + parameter;
+			consoleMoveCursorY(parameter);
 			return escapelen;
 
 		case 'C':
 			if (sscanf(escapeseq, "%dC", &parameter) < 1)
 				parameter = 1;
-			currentConsole->cursorX = (currentConsole->cursorX + parameter) > currentConsole->windowWidth - 1
-										  ? currentConsole->windowWidth - 1
-										  : currentConsole->cursorX + parameter;
+			// currentConsole->cursorX = (currentConsole->cursorX + parameter) > currentConsole->windowWidth - 1
+			// 							  ? currentConsole->windowWidth - 1
+			// 							  : currentConsole->cursorX + parameter;
+			consoleMoveCursorX(parameter);
 			return escapelen;
 
 		case 'D':
 			if (sscanf(escapeseq, "%dD", &parameter) < 1)
 				parameter = 1;
-			currentConsole->cursorX =
-				(currentConsole->cursorX - parameter) < 0 ? 0 : currentConsole->cursorX - parameter;
+			// currentConsole->cursorX =
+			// 	(currentConsole->cursorX - parameter) < 0 ? 0 : currentConsole->cursorX - parameter;
+			consoleMoveCursorX(-parameter);
 			return escapelen;
 
 		// Cursor position movement
 		case 'H':
-		case 'f':
-			sscanf(escapeseq, "%d;%d", &currentConsole->cursorY, &currentConsole->cursorX);
+		case 'f': {
+			int x, y;
+			sscanf(escapeseq, "%d;%d", &y, &x);
+			consoleSetCursorPos(x, y);
 			return escapelen;
+		}
 
 		// Screen clear
 		case 'J':
@@ -219,8 +219,9 @@ int consoleParseEscapeSequence(const char *ptr, int len) {
 
 		// Load cursor position
 		case 'u':
-			currentConsole->cursorX = currentConsole->prevCursorX;
-			currentConsole->cursorY = currentConsole->prevCursorY;
+			// currentConsole->cursorX = currentConsole->prevCursorX;
+			// currentConsole->cursorY = currentConsole->prevCursorY;
+			consoleSetCursorPos(currentConsole->prevCursorX, currentConsole->prevCursorY);
 			return escapelen;
 
 		// Color/style modes

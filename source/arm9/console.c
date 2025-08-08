@@ -36,6 +36,8 @@ distribution.
 #include <stdarg.h>
 #include <sys/iosupport.h>
 
+#include "console-priv.h"
+
 
 PrintConsole defaultConsole =
 {
@@ -76,10 +78,6 @@ PrintConsole currentCopy;
 PrintConsole* currentConsole = &currentCopy;
 
 PrintConsole* consoleGetDefault(void){return &defaultConsole;}
-
-void consolePrintChar(char c);
-
-int consoleParseEscapeSequence(const char *ptr, int len);
 
 
 //---------------------------------------------------------------------------------
@@ -443,6 +441,8 @@ PrintConsole* consoleInit(PrintConsole* console, int layer,
 	if(loadGraphics)
 		consoleLoadFont(console);
 
+	consoleSetCursorChar(219);
+
 	return currentConsole;
 
 }
@@ -501,9 +501,9 @@ PrintConsole* consoleDemoInit(void) {
 }
 
 //---------------------------------------------------------------------------------
-static void newRow() {
+void newRow() {
 //---------------------------------------------------------------------------------
-
+	consoleRestoreFbmvUnderCursor();
 
 	currentConsole->cursorY ++;
 
@@ -523,64 +523,8 @@ static void newRow() {
 				(' ' + currentConsole->fontCharOffset - currentConsole->font.asciiOffset);
 
 	}
-}
 
-
-//---------------------------------------------------------------------------------
-void consolePrintChar(char c) {
-//---------------------------------------------------------------------------------
-	if (c==0) return;
-	if(currentConsole->fontBgMap == 0) return;
-
-	if(currentConsole->PrintChar)
-		if(currentConsole->PrintChar(currentConsole, c))
-			return;
-
-	if(currentConsole->cursorX  >= currentConsole->windowWidth) {
-		currentConsole->cursorX  = 0;
-
-		newRow();
-	}
-
-	switch(c) {
-		/*
-		The only special characters we will handle are tab (\t), carriage return (\r), line feed (\n)
-		and backspace (\b).
-		Carriage return & line feed will function the same: go to next line and put cursor at the beginning.
-		For everything else, use VT sequences.
-
-		Reason: VT sequences are more specific to the task of cursor placement.
-		The special escape sequences \b \f & \v are archaic and non-portable.
-		*/
-		case 8:
-			currentConsole->cursorX--;
-
-			if(currentConsole->cursorX < 0) {
-				if(currentConsole->cursorY > 0) {
-					currentConsole->cursorX = currentConsole->windowX - 1;
-					currentConsole->cursorY--;
-				} else {
-					currentConsole->cursorX = 0;
-				}
-			}
-
-			currentConsole->fontBgMap[currentConsole->cursorX + currentConsole->windowX + (currentConsole->cursorY + currentConsole->windowY) * currentConsole->consoleWidth] = currentConsole->fontCurPal | (u16)(' ' + currentConsole->fontCharOffset - currentConsole->font.asciiOffset);
-
-			break;
-
-		case 9:
-			currentConsole->cursorX  += currentConsole->tabSize - ((currentConsole->cursorX)%(currentConsole->tabSize));
-			break;
-		case 10:
-			newRow();
-		case 13:
-			currentConsole->cursorX  = 0;
-			break;
-		default:
-			currentConsole->fontBgMap[currentConsole->cursorX + currentConsole->windowX + (currentConsole->cursorY + currentConsole->windowY) * currentConsole->consoleWidth] = currentConsole->fontCurPal | (u16)(c + currentConsole->fontCharOffset - currentConsole->font.asciiOffset);
-			++currentConsole->cursorX ;
-			break;
-	}
+	consoleSaveFbmvUnderCursor();
 }
 
 //---------------------------------------------------------------------------------

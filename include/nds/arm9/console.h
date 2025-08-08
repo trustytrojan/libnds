@@ -168,6 +168,8 @@ typedef struct PrintConsole
 
 	bool consoleInitialised;	/*!< True if the console is initialized */
 	bool loadGraphics;			/*!< True if consoleInit should attempt to load font graphics into background memory */
+
+	bool echo; // Whether to echo characters written to this console, similar to the ECHO termios attribute.
 }PrintConsole;
 
 
