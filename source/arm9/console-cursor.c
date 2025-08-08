@@ -51,14 +51,19 @@ void consoleDrawCursor(void) {
 }
 
 void consoleSetCursorPos(const int x, const int y) {
-	consoleRestoreTileUnderCursor();
+	if (currentConsole->bg2Id != -1)
+		consoleRestoreTileUnderCursor();
+
 	currentConsole->cursorX = x;
 	currentConsole->cursorY = y;
-	consoleSaveTileUnderCursor();
 
-	// original tile saved! now let's make the cursor visible with
-	// white background and black foreground.
-	consoleDrawCursor();
+	if (currentConsole->bg2Id != -1) {
+		consoleSaveTileUnderCursor();
+
+		// original tile saved! now let's make the cursor visible with
+		// white background and black foreground.
+		consoleDrawCursor();
+	}
 }
 
 void consoleSetCursorY(const int y) {
@@ -69,16 +74,24 @@ void consoleSetCursorX(const int x) {
 	consoleSetCursorPos(x, currentConsole->cursorY);
 }
 
+int clamp(const int n, const int min, const int max) {
+	if (n < min)
+		return min;
+	if (n > max)
+		return max;
+	return n;
+}
+
 void consoleMoveCursorX(const int dx) {
 	const PrintConsole *const c = currentConsole;
 	const int newX = c->cursorX + dx;
 	const int maxX = c->windowWidth - 1;
-	consoleSetCursorX((newX > maxX) ? maxX : newX);
+	consoleSetCursorX(clamp(newX, 0, maxX));
 }
 
 void consoleMoveCursorY(const int dy) {
 	const PrintConsole *const c = currentConsole;
 	const int newY = c->cursorY + dy;
 	const int maxY = c->windowHeight - 1;
-	consoleSetCursorY((newY > maxY) ? maxY : newY);
+	consoleSetCursorY(clamp(newY, 0, maxY));
 }

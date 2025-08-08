@@ -303,7 +303,8 @@ void consoleLoadFont(PrintConsole* console) {
 			}
 
 			*out++ = temp;
-			*out2++ = temp;
+			if (console->bg2Id != -1)
+				*out2++ = temp;
 		}
 
 		goto _setUpPalette;
@@ -405,7 +406,8 @@ _setUpPalette:
 PrintConsole* consoleInit(PrintConsole* console, int layer,
 				BgType type, BgSize size,
 				int mapBase, int tileBase,
-				bool mainDisplay, bool loadGraphics){
+				bool mainDisplay, bool loadGraphics,
+				bool ansiBgColors){
 //---------------------------------------------------------------------------------
 
 	static bool firstConsoleInit = true;
@@ -430,17 +432,19 @@ PrintConsole* consoleInit(PrintConsole* console, int layer,
 
 	if(mainDisplay) {
 		console->bgId = bgInit(layer, type, size, mapBase, tileBase);
-		console->bg2Id = bgInit(layer + 1, type, size, mapBase + 1, tileBase);
+		console->bg2Id = ansiBgColors ? bgInit(layer + 1, type, size, mapBase + 1, tileBase) : -1;
 	} else {
 		console->bgId = bgInitSub(layer, type, size, mapBase, tileBase);
-		console->bg2Id = bgInitSub(layer + 1, type, size, mapBase + 1, tileBase);
+		console->bg2Id = ansiBgColors ? bgInitSub(layer + 1, type, size, mapBase + 1, tileBase) : -1;
 	}
 
 	console->fontBgGfx = bgGetGfxPtr(console->bgId);
 	console->fontBgMap = bgGetMapPtr(console->bgId);
 
-	console->fontBg2Gfx = bgGetGfxPtr(console->bg2Id);
-	console->fontBg2Map = bgGetMapPtr(console->bg2Id);
+	if (console->bg2Id != -1) {
+		console->fontBg2Gfx = bgGetGfxPtr(console->bg2Id);
+		console->fontBg2Map = bgGetMapPtr(console->bg2Id);
+	}
 
 	console->consoleInitialised = 1;
 
@@ -503,13 +507,14 @@ PrintConsole* consoleDemoInit(void) {
 	videoSetModeSub(MODE_0_2D);
 	vramSetBankC(VRAM_C_SUB_BG);
 
-	return consoleInit(NULL, defaultConsole.bgLayer, BgType_Text4bpp, BgSize_T_256x256, defaultConsole.mapBase, defaultConsole.gfxBase, false, true);
+	return consoleInit(NULL, defaultConsole.bgLayer, BgType_Text4bpp, BgSize_T_256x256, defaultConsole.mapBase, defaultConsole.gfxBase, false, true, false);
 }
 
 //---------------------------------------------------------------------------------
 void newRow() {
 //---------------------------------------------------------------------------------
-	consoleRestoreTileUnderCursor();
+	if (currentConsole->bg2Id != -1)
+		consoleRestoreTileUnderCursor();
 
 	currentConsole->cursorY ++;
 
@@ -520,17 +525,21 @@ void newRow() {
 		currentConsole->cursorY --;
 
 		for(rowCount = 0; rowCount < currentConsole->windowHeight - 1; rowCount++)
-			for(colCount = 0; colCount < currentConsole->windowWidth; colCount++)
-				currentConsole->fontBgMap[(colCount + currentConsole->windowX) + (rowCount + currentConsole->windowY) * currentConsole->consoleWidth] =
-					currentConsole->fontBgMap[(colCount + currentConsole->windowX) + (rowCount + currentConsole->windowY + 1) * currentConsole->consoleWidth];
+			for(colCount = 0; colCount < currentConsole->windowWidth; colCount++) {
+				*consoleFontBgMapAt(colCount, rowCount) = *consoleFontBgMapAt(colCount, rowCount + 1);
+				if (currentConsole->bg2Id != -1)
+					*consoleFontBg2MapAt(colCount, rowCount) = *consoleFontBg2MapAt(colCount, rowCount + 1);
+			}
 
-		for(colCount = 0; colCount < currentConsole->windowWidth; colCount++)
-			currentConsole->fontBgMap[(colCount + currentConsole->windowX) + (rowCount + currentConsole->windowY) * currentConsole->consoleWidth] =
-				(' ' + currentConsole->fontCharOffset - currentConsole->font.asciiOffset);
-
+		for(colCount = 0; colCount < currentConsole->windowWidth; colCount++) {
+			*consoleFontBgMapAt(colCount, rowCount) = consoleComputeFontBgMapValue(' ');
+			if (currentConsole->bg2Id != -1)
+				*consoleFontBg2MapAt(colCount, rowCount) = consoleComputeFontBg2MapValue(' ');
+		}
 	}
 
-	consoleSaveTileUnderCursor();
+	if (currentConsole->bg2Id != -1)
+		consoleSaveTileUnderCursor();
 }
 
 //---------------------------------------------------------------------------------

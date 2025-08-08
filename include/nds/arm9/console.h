@@ -221,9 +221,10 @@ PrintConsole *consoleSelect(PrintConsole* console);
 	\param tileBase the tile graphics base
 	\param mainDisplay if true main engine is used, otherwise false
 	\param loadGraphics if true the default font graphics will be loaded into the layer
+	\param ansiBgColors if true, uses \c layer + 1 for ANSI background color escape sequences
 	\return A pointer to the current console.
 */
-PrintConsole* consoleInit(PrintConsole* console, int layer, BgType type, BgSize size, int mapBase, int tileBase, bool mainDisplay, bool loadGraphics);
+PrintConsole* consoleInit(PrintConsole* console, int layer, BgType type, BgSize size, int mapBase, int tileBase, bool mainDisplay, bool loadGraphics, bool ansiBgColors);
 
 /*!	\brief Initialize the console to a default state for prototyping.
 	This function sets the console to use sub display, VRAM_C, and BG0 and enables MODE_0_2D on the

@@ -25,15 +25,15 @@ distribution.
 
 u16 *consoleFontBgMapAt(const int x, const int y) {
 	const PrintConsole *const c = currentConsole;
-	const int xOffset = c->cursorX + c->windowX;
-	const int yOffset = (c->cursorY + c->windowY) * c->consoleWidth;
+	const int xOffset = x + c->windowX;
+	const int yOffset = (y + c->windowY) * c->consoleWidth;
 	return c->fontBgMap + xOffset + yOffset;
 }
 
 u16 *consoleFontBg2MapAt(const int x, const int y) {
 	const PrintConsole *const c = currentConsole;
-	const int xOffset = c->cursorX + c->windowX;
-	const int yOffset = (c->cursorY + c->windowY) * c->consoleWidth;
+	const int xOffset = x + c->windowX;
+	const int yOffset = (y + c->windowY) * c->consoleWidth;
 	return c->fontBg2Map + xOffset + yOffset;
 }
 
@@ -57,6 +57,21 @@ u16 consoleComputeFontBg2MapValue(const char ch) {
 	return c->fontCurPal2 | (u16)(ch + c->fontCharOffset - c->font.asciiOffset);
 }
 
+void consoleCommitChar(const char ch) {
+	PrintConsole *const c = currentConsole;
+
+	*consoleFontBgMapAtCursor() = consoleComputeFontBgMapValue(ch); // fg
+	if (c->bg2Id != -1)
+		*consoleFontBg2MapAtCursor() = consoleComputeFontBg2MapValue(219); // bg
+
+	++c->cursorX;
+
+	if (c->bg2Id != -1) {
+		consoleSaveTileUnderCursor();
+		consoleDrawCursor();
+	}
+}
+
 // could have a better name, since we aren't always printing a character
 void consolePrintChar(const char ch) {
 	if (!ch)
@@ -75,8 +90,10 @@ void consolePrintChar(const char ch) {
 		return;
 
 	if (c->cursorX >= c->windowWidth) {
-		// c->cursorX = 0;
-		consoleSetCursorX(0);
+		if (currentConsole->bg2Id == -1)
+			c->cursorX = 0;
+		else
+			consoleSetCursorX(0);
 		newRow();
 	}
 
@@ -115,12 +132,15 @@ void consolePrintChar(const char ch) {
 		*/
 
 		if (c->echo)
-			*consoleFontBgMapAtCursor() = consoleComputeFontBgMapValue('\b');
+			// *consoleFontBgMapAtCursor() = consoleComputeFontBgMapValue('\b');
+			consoleCommitChar('\b');
 		break;
 
 	case '\t':
-		// c->cursorX += c->tabSize - ((c->cursorX) % (c->tabSize));
-		consoleMoveCursorX(c->tabSize - ((c->cursorX) % (c->tabSize)));
+		if (currentConsole->bg2Id == -1)
+			c->cursorX += c->tabSize - ((c->cursorX) % (c->tabSize));
+		else
+			consoleMoveCursorX(c->tabSize - ((c->cursorX) % (c->tabSize)));
 		break;
 
 	case '\n':
@@ -128,17 +148,13 @@ void consolePrintChar(const char ch) {
 		// also return to first column:
 
 	case '\r':
-		// c->cursorX = 0;
-		consoleSetCursorX(0);
+		if (currentConsole->bg2Id == -1)
+			c->cursorX = 0;
+		else
+			consoleSetCursorX(0);
 		break;
 
 	default:
-		*consoleFontBgMapAtCursor() = consoleComputeFontBgMapValue(ch);	   // fg
-		*consoleFontBg2MapAtCursor() = consoleComputeFontBg2MapValue(219); // bg
-
-		++c->cursorX;
-		consoleSaveTileUnderCursor();
-		consoleDrawCursor();
-		// consoleMoveCursorX(1);
+		consoleCommitChar(ch);
 	}
 }
