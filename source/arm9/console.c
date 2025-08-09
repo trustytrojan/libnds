@@ -134,66 +134,26 @@ void consoleCls(char mode) {
 //---------------------------------------------------------------------------------
 void consoleClearLine(char mode) {
 //---------------------------------------------------------------------------------
+    int i = 0;
+    int line = currentConsole->cursorY;
+    int start = 0;
+    int end = currentConsole->windowWidth;
 
-	int i = 0;
-	int colTemp;
+    if (mode == '1') {
+        end = currentConsole->cursorX;
+    } else if (mode == '0') {
+        start = currentConsole->cursorX;
+    }
 
-	switch (mode)
-	{
-	case '[':
-	case '0':
-		{
-			colTemp = currentConsole->cursorX ;
+    // The character offset for ' ' in the font.
+    u16 blank = currentConsole->fontCharOffset - currentConsole->font.asciiOffset;
 
-			while(i++ < (currentConsole->windowWidth - colTemp)) {
-				consolePrintChar(' ');
-			}
-
-			currentConsole->cursorX  = colTemp;
-
-			break;
-		}
-	case '1':
-		{
-			colTemp = currentConsole->cursorX ;
-
-			currentConsole->cursorX  = 0;
-
-			while(i++ < ((currentConsole->windowWidth - colTemp)-2)) {
-				consolePrintChar(' ');
-			}
-
-			currentConsole->cursorX  = colTemp;
-
-			break;
-		}
-	case '2':
-		{
-			colTemp = currentConsole->cursorX ;
-
-			currentConsole->cursorX  = 0;
-
-			while(i++ < currentConsole->windowWidth) {
-				consolePrintChar(' ');
-			}
-
-			currentConsole->cursorX  = colTemp;
-
-			break;
-		}
-	default:
-		{
-			colTemp = currentConsole->cursorX ;
-
-			while(i++ < (currentConsole->windowWidth - colTemp)) {
-				consolePrintChar(' ');
-			}
-
-			currentConsole->cursorX  = colTemp;
-
-			break;
-		}
-	}
+    for (i = start; i < end; i++) {
+        // Clear with default colors (fg: white, bg: black) regardless of current palette.
+        *consoleFontBgMapAt(i, line) = (15 << 12) | blank;
+        if (currentConsole->bg2Id != -1)
+            *consoleFontBg2MapAt(i, line) = (0 << 12) | blank;
+    }
 }
 
 //---------------------------------------------------------------------------------
@@ -222,7 +182,7 @@ ssize_t con_write(struct _reent *r,void *fd,const char *ptr, size_t len) {
 		chr = *(tmp++);
 		i++; count++;
 
-		if ( chr == 0x1b && i < len && *tmp == '[' ) {
+		if ( chr == 0x1b && *tmp == '[' && i < len ) {
 			// skip the '['
 			tmp++; i++; count++;
 			// len - i: the REMAINING length in the buffer
@@ -527,12 +487,16 @@ void newRow() {
 		for(rowCount = 0; rowCount < currentConsole->windowHeight - 1; rowCount++)
 			for(colCount = 0; colCount < currentConsole->windowWidth; colCount++) {
 				*consoleFontBgMapAt(colCount, rowCount) = *consoleFontBgMapAt(colCount, rowCount + 1);
+				// currentConsole->fontBgMap[(colCount + currentConsole->windowX) + (rowCount + currentConsole->windowY) * currentConsole->consoleWidth] =
+				// 	currentConsole->fontBgMap[(colCount + currentConsole->windowX) + (rowCount + currentConsole->windowY + 1) * currentConsole->consoleWidth];
 				if (currentConsole->bg2Id != -1)
 					*consoleFontBg2MapAt(colCount, rowCount) = *consoleFontBg2MapAt(colCount, rowCount + 1);
 			}
 
 		for(colCount = 0; colCount < currentConsole->windowWidth; colCount++) {
 			*consoleFontBgMapAt(colCount, rowCount) = consoleComputeFontBgMapValue(' ');
+			// currentConsole->fontBgMap[(colCount + currentConsole->windowX) + (rowCount + currentConsole->windowY) * currentConsole->consoleWidth] =
+			// 	(' ' + currentConsole->fontCharOffset - currentConsole->font.asciiOffset);
 			if (currentConsole->bg2Id != -1)
 				*consoleFontBg2MapAt(colCount, rowCount) = consoleComputeFontBg2MapValue(' ');
 		}

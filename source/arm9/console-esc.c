@@ -78,6 +78,7 @@ static void consoleParseColor(const char *escapeseq, int escapelen) {
 	// Special case: \x1b[m resets attributes
 	if (*escapeseq == 'm') {
 		currentConsole->fontCurPal = 15 << 12; // Default color (bright white)
+		currentConsole->fontCurPal2 = 0; // black bg
 		return;
 	}
 
@@ -102,23 +103,27 @@ static void consoleParseColor(const char *escapeseq, int escapelen) {
 	// consumed thus far into the next pointer! use this to advance `p`.
 
 	// start consuming arguments, delimited with ';'
-	do {
-		items_matched = siscanf(p, "%d;%n", &param, &chars_consumed);
+    while (true) {
+        // Try to parse a parameter followed by a semicolon
+        items_matched = siscanf(p, "%d;%n", &param, &chars_consumed);
+        if (items_matched > 0) {
+            updateColorBright(param, &color, &bgcolor, &bright);
+            p += chars_consumed;
+            continue;
+        }
 
-		if (items_matched > 0) {
-			// the %d got matched, param is valid!
-			updateColorBright(param, &color, &bgcolor, &bright);
-		}
+        // If that failed, try to parse the final parameter ending in 'm'
+        items_matched = siscanf(p, "%dm", &param);
+        if (items_matched > 0) {
+            updateColorBright(param, &color, &bgcolor, &bright);
+        }
 
-		// only advance p if items were matched
-		p += chars_consumed;
-	} while (items_matched > 0);
+        // End of sequence
+        break;
+    }
 
-	// end of arguments must end with 'm'
-	if (siscanf(p, "%dm%n", &param, &chars_consumed) > 0) {
-		// the %d got matched, param is valid!
-		updateColorBright(param, &color, &bgcolor, &bright);
-	}
+	if (!currentConsole)
+		return;
 
 	// handle cases when only bold (1) modifier is used. this only affects foreground.
 	// this should simply turn the current color into its bright variant.
@@ -192,8 +197,10 @@ int consoleParseEscapeSequence(const char *ptr, int len) {
 		case 'H':
 		case 'f': {
 			int x, y;
-			sscanf(escapeseq, "%d;%d", &y, &x);
-			consoleSetCursorPos(x, y);
+			if (sscanf(escapeseq, "%d;%d", &y, &x) == 2)
+				consoleSetCursorPos(x, y);
+			else
+			 	consoleSetCursorPos(0, 0);
 			return escapelen;
 		}
 

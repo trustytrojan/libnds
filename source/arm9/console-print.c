@@ -61,6 +61,7 @@ void consoleCommitChar(const char ch) {
 	PrintConsole *const c = currentConsole;
 
 	*consoleFontBgMapAtCursor() = consoleComputeFontBgMapValue(ch); // fg
+
 	if (c->bg2Id != -1)
 		*consoleFontBg2MapAtCursor() = consoleComputeFontBg2MapValue(219); // bg
 
@@ -130,10 +131,6 @@ void consolePrintChar(const char ch) {
 
 			the responsibilities should NOT be mixed together.
 		*/
-
-		if (c->echo)
-			// *consoleFontBgMapAtCursor() = consoleComputeFontBgMapValue('\b');
-			consoleCommitChar('\b');
 		break;
 
 	case '\t':
@@ -155,6 +152,16 @@ void consolePrintChar(const char ch) {
 		break;
 
 	default:
-		consoleCommitChar(ch);
+		*consoleFontBgMapAtCursor() = consoleComputeFontBgMapValue(ch); // fg
+
+		if (c->bg2Id != -1)
+			*consoleFontBg2MapAtCursor() = consoleComputeFontBg2MapValue(219); // bg
+
+		++c->cursorX;
+
+		if (c->bg2Id != -1) {
+			consoleSaveTileUnderCursor();
+			consoleDrawCursor();
+		}
 	}
 }

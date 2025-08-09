@@ -23,9 +23,8 @@ distribution.
 ---------------------------------------------------------------------------------*/
 #include "console-priv.h"
 
-// This saves the foreground and background color of
-// whatever tile we just moved on top of.
-// fb2mv should always be the full block ASCII character (219).
+// These save the palette and character of whatever tile the cursor moves on top of.
+// fb2mv should always contain the full block ASCII character (219).
 static u16 fbmvUnderCursor, fb2mvUnderCursor;
 
 void consoleSaveTileUnderCursor(void) {
@@ -41,9 +40,9 @@ void consoleRestoreTileUnderCursor(void) {
 void consoleDrawCursor(void) {
 	// foreground: this is the character itself. we need to turn it black,
 	// which would usually be a fontCurPal of (0 << 12). however fbmvUnderCursor
-	// 99% of the time does not have those bits zeroed inside. (who uses black on black?)
-	// so we need to zero-out those bits:
-	// static const u16 BLACK_BITMASK = (u16)(UINT16_MAX << 4) >> 4;
+	// is not being computed on the fly (like below), so 99% of the time it 
+	// does not have those bits zeroed inside. (who uses black on black?)
+	// so we need to zero-out those bits to make it black:
 	*consoleFontBgMapAtCursor() = 0x0fff & fbmvUnderCursor;
 
 	// background: just use bright write (15)
