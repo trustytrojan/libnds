@@ -75,10 +75,13 @@ static void updateColorBright(const int param, int *const color, int *const bgco
 }
 
 static void consoleParseColor(const char *escapeseq, int escapelen) {
+	if (!currentConsole)
+		return;
+
 	// Special case: \x1b[m resets attributes
 	if (*escapeseq == 'm') {
 		currentConsole->fontCurPal = 15 << 12; // Default color (bright white)
-		currentConsole->fontCurPal2 = 0; // black bg
+		currentConsole->fontCurPal2 = 0;	   // black bg
 		return;
 	}
 
@@ -103,27 +106,23 @@ static void consoleParseColor(const char *escapeseq, int escapelen) {
 	// consumed thus far into the next pointer! use this to advance `p`.
 
 	// start consuming arguments, delimited with ';'
-    while (true) {
-        // Try to parse a parameter followed by a semicolon
-        items_matched = siscanf(p, "%d;%n", &param, &chars_consumed);
-        if (items_matched > 0) {
-            updateColorBright(param, &color, &bgcolor, &bright);
-            p += chars_consumed;
-            continue;
-        }
+	while (true) {
+		// Try to parse a parameter followed by a semicolon
+		items_matched = siscanf(p, "%d;%n", &param, &chars_consumed);
+		if (items_matched > 0) {
+			updateColorBright(param, &color, &bgcolor, &bright);
+			p += chars_consumed;
+			continue;
+		}
 
-        // If that failed, try to parse the final parameter ending in 'm'
-        items_matched = siscanf(p, "%dm", &param);
-        if (items_matched > 0) {
-            updateColorBright(param, &color, &bgcolor, &bright);
-        }
+		// If that failed, try to parse the final parameter ending in 'm'
+		items_matched = siscanf(p, "%dm", &param);
+		if (items_matched > 0)
+			updateColorBright(param, &color, &bgcolor, &bright);
 
-        // End of sequence
-        break;
-    }
-
-	if (!currentConsole)
-		return;
+		// End of sequence
+		break;
+	}
 
 	// handle cases when only bold (1) modifier is used. this only affects foreground.
 	// this should simply turn the current color into its bright variant.
@@ -168,27 +167,27 @@ int consoleParseEscapeSequence(const char *ptr, int len) {
 		case 'l':
 			return escapelen;
 
-		// Cursor directional movement (TODO: make these use consoleMoveCursorX/Y instead)
+		// Cursor directional movement
 		case 'A':
-			if (sscanf(escapeseq, "%dA", &parameter) < 1)
+			if (siscanf(escapeseq, "%dA", &parameter) < 1)
 				parameter = 1;
 			consoleMoveCursorY(-parameter);
 			return escapelen;
 
 		case 'B':
-			if (sscanf(escapeseq, "%dB", &parameter) < 1)
+			if (siscanf(escapeseq, "%dB", &parameter) < 1)
 				parameter = 1;
 			consoleMoveCursorY(parameter);
 			return escapelen;
 
 		case 'C':
-			if (sscanf(escapeseq, "%dC", &parameter) < 1)
+			if (siscanf(escapeseq, "%dC", &parameter) < 1)
 				parameter = 1;
 			consoleMoveCursorX(parameter);
 			return escapelen;
 
 		case 'D':
-			if (sscanf(escapeseq, "%dD", &parameter) < 1)
+			if (siscanf(escapeseq, "%dD", &parameter) < 1)
 				parameter = 1;
 			consoleMoveCursorX(-parameter);
 			return escapelen;
@@ -197,10 +196,10 @@ int consoleParseEscapeSequence(const char *ptr, int len) {
 		case 'H':
 		case 'f': {
 			int x, y;
-			if (sscanf(escapeseq, "%d;%d", &y, &x) == 2)
+			if (siscanf(escapeseq, "%d;%d", &y, &x) == 2)
 				consoleSetCursorPos(x, y);
 			else
-			 	consoleSetCursorPos(0, 0);
+				consoleSetCursorPos(0, 0);
 			return escapelen;
 		}
 
