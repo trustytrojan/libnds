@@ -47,7 +47,7 @@ static void updateColorBright(const int param, int *const color, int *const bgco
 	}
 }
 
-static void consoleParseColor(const char *escapeseq) {
+static void consoleParseColor(const char *const escapeseq) {
 	if (!currentConsole)
 		return;
 
@@ -127,7 +127,7 @@ static void consoleParseColor(const char *escapeseq) {
 static void consoleParseCsiSequence(void) {
 	PrintConsole *const c = currentConsole;
 	const char *const seq = c->escBuf + 2; // Skip "\e["
-	const int len = c->escBufLen;
+	const int len = c->escBufLen - 2;
 
 	// The last character decides the function of the sequence
 	const char command = c->escBuf[c->escBufLen - 1];
@@ -183,7 +183,7 @@ static void consoleParseCsiSequence(void) {
 
 	// Screen clear
 	case 'J':
-		consoleCls(seq[len - 2]);
+		consoleClearScreen(seq[len - 2]);
 		break;
 
 	// Line clear

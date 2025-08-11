@@ -57,6 +57,36 @@ u16 consoleComputeFontBg2MapValue(const char ch) {
 	return c->fontCurPal2 | (u16)(ch + c->fontCharOffset - c->font.asciiOffset);
 }
 
+static void newRow() {
+	if (currentConsole->bg2Id != -1)
+		consoleRestoreTileUnderCursor();
+
+	currentConsole->cursorY++;
+
+	if (currentConsole->cursorY >= currentConsole->windowHeight) {
+		int rowCount;
+		int colCount;
+
+		currentConsole->cursorY--;
+
+		for (rowCount = 0; rowCount < currentConsole->windowHeight - 1; rowCount++)
+			for (colCount = 0; colCount < currentConsole->windowWidth; colCount++) {
+				*consoleFontBgMapAt(colCount, rowCount) = *consoleFontBgMapAt(colCount, rowCount + 1);
+				if (currentConsole->bg2Id != -1)
+					*consoleFontBg2MapAt(colCount, rowCount) = *consoleFontBg2MapAt(colCount, rowCount + 1);
+			}
+
+		for (colCount = 0; colCount < currentConsole->windowWidth; colCount++) {
+			*consoleFontBgMapAt(colCount, rowCount) = consoleComputeFontBgMapValue(' ');
+			if (currentConsole->bg2Id != -1)
+				*consoleFontBg2MapAt(colCount, rowCount) = consoleComputeFontBg2MapValue(' ');
+		}
+	}
+
+	if (currentConsole->bg2Id != -1)
+		consoleSaveTileUnderCursor();
+}
+
 void consoleCommitChar(const char ch) {
 	PrintConsole *const c = currentConsole;
 

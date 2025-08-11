@@ -29,9 +29,8 @@ distribution.
 
 // console.c
 extern PrintConsole *currentConsole;
-void consoleCls(char mode);
+void consoleClearScreen(char mode);
 void consoleClearLine(char mode);
-void newRow();
 
 // console-print.c
 u16 *consoleFontBgMapAt(int x, int y);
