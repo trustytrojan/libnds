@@ -137,29 +137,34 @@ void consoleCls(char mode) {
 		}
 	}
 }
-//---------------------------------------------------------------------------------
+
 void consoleClearLine(char mode) {
-//---------------------------------------------------------------------------------
-    int i = 0;
-    int line = currentConsole->cursorY;
-    int start = 0;
-    int end = currentConsole->windowWidth;
+	int line = currentConsole->cursorY;
 
-    if (mode == '1') {
-        end = currentConsole->cursorX;
-    } else if (mode == '0') {
-        start = currentConsole->cursorX;
-    }
+	// \e[K is same as \e[0K: from cursor to end of line
+	// so use its parameters as the default.
+	int start = currentConsole->cursorX;
+	int end = currentConsole->windowWidth;
 
-    // The character offset for ' ' in the font.
-    u16 blank = currentConsole->fontCharOffset - currentConsole->font.asciiOffset;
+	if (mode == '1') {
+		// start of line to cursor
+		start = 0;
+		end = currentConsole->cursorX;
+	} else if (mode == '2') {
+		// whole line
+		start = 0;
+		end = currentConsole->windowWidth;
+	}
 
-    for (i = start; i < end; i++) {
-        // Clear with default colors (fg: white, bg: black) regardless of current palette.
-        *consoleFontBgMapAt(i, line) = (15 << 12) | blank;
-        if (currentConsole->bg2Id != -1)
-            *consoleFontBg2MapAt(i, line) = (0 << 12) | blank;
-    }
+	// The character offset for ' ' in the font.
+	const u16 blank = ' ' + currentConsole->fontCharOffset - currentConsole->font.asciiOffset;
+
+	for (int i = start; i < end; ++i) {
+		// Clear with default colors (fg: white, bg: black) regardless of current palette.
+		*consoleFontBgMapAt(i, line) = (15 << 12) | blank;
+		if (currentConsole->bg2Id != -1)
+			*consoleFontBg2MapAt(i, line) = (0 << 12) | blank;
+	}
 }
 
 //---------------------------------------------------------------------------------
@@ -446,17 +451,15 @@ void consoleDebugInit(DebugDevice device){
 //---------------------------------------------------------------------------------
 // Places the console in a default mode using bg0 of the sub display, and vram c for
 // font and map..this is provided for rapid prototyping and nothing more
-PrintConsole* consoleDemoInit(void) {
 //---------------------------------------------------------------------------------
+PrintConsole* consoleDemoInit(void) {
 	videoSetModeSub(MODE_0_2D);
 	vramSetBankC(VRAM_C_SUB_BG);
 
 	return consoleInit(NULL, defaultConsole.bgLayer, BgType_Text4bpp, BgSize_T_256x256, defaultConsole.mapBase, defaultConsole.gfxBase, false, true, false);
 }
 
-//---------------------------------------------------------------------------------
 void newRow() {
-//---------------------------------------------------------------------------------
 	if (currentConsole->bg2Id != -1)
 		consoleRestoreTileUnderCursor();
 
@@ -471,16 +474,12 @@ void newRow() {
 		for(rowCount = 0; rowCount < currentConsole->windowHeight - 1; rowCount++)
 			for(colCount = 0; colCount < currentConsole->windowWidth; colCount++) {
 				*consoleFontBgMapAt(colCount, rowCount) = *consoleFontBgMapAt(colCount, rowCount + 1);
-				// currentConsole->fontBgMap[(colCount + currentConsole->windowX) + (rowCount + currentConsole->windowY) * currentConsole->consoleWidth] =
-				// 	currentConsole->fontBgMap[(colCount + currentConsole->windowX) + (rowCount + currentConsole->windowY + 1) * currentConsole->consoleWidth];
 				if (currentConsole->bg2Id != -1)
 					*consoleFontBg2MapAt(colCount, rowCount) = *consoleFontBg2MapAt(colCount, rowCount + 1);
 			}
 
 		for(colCount = 0; colCount < currentConsole->windowWidth; colCount++) {
 			*consoleFontBgMapAt(colCount, rowCount) = consoleComputeFontBgMapValue(' ');
-			// currentConsole->fontBgMap[(colCount + currentConsole->windowX) + (rowCount + currentConsole->windowY) * currentConsole->consoleWidth] =
-			// 	(' ' + currentConsole->fontCharOffset - currentConsole->font.asciiOffset);
 			if (currentConsole->bg2Id != -1)
 				*consoleFontBg2MapAt(colCount, rowCount) = consoleComputeFontBg2MapValue(' ');
 		}
