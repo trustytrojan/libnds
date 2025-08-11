@@ -53,4 +53,5 @@ void consoleSetCursorPos(int x, int y);
 void consoleDrawCursor(void);
 
 // console-esc.c
+void consoleUpdateEscapeSequence(char c);
 int consoleParseEscapeSequence(const char *ptr, int len);

@@ -169,11 +169,13 @@ typedef struct PrintConsole
 	bool consoleInitialised;	/*!< True if the console is initialized */
 	bool loadGraphics;			/*!< True if consoleInit should attempt to load font graphics into background memory */
 
-	bool echo; // Whether to echo characters written to this console, similar to the ECHO termios attribute.
 	int bg2Id; // ID of bg used for ANSI background colors!
-
 	u16 *fontBg2Map, *fontBg2Gfx; // map & gfx for the 2nd bg
 	u16 fontCurPal2; // palette for background colors
+
+	// Internal buffer for potential ANSI escape sequences, as all the characters may not be available in one con_write() call.
+	char escBuf[32];
+	int escBufLen;
 }PrintConsole;
 
 
@@ -204,7 +206,7 @@ void consoleSetWindow(PrintConsole* console, int x, int y, int width, int height
 	this should only be used when using a single console or without changing the console that is returned, other wise use consoleInit()
 	\return A pointer to the console with the default values
 */
-PrintConsole* consoleGetDefault(void);
+const PrintConsole* consoleGetDefault(void);
 
 /*!	\brief Make the specified console the render target
 	\param console A pointer to the console struct (must have been initialized with consoleInit(PrintConsole* console)

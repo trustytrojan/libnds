@@ -22,36 +22,9 @@ distribution.
 
 ---------------------------------------------------------------------------------*/
 #include "console-priv.h"
+#include <ctype.h>
 #include <stdio.h>
-
-/*
-TODO, if it becomes important enough:
-
-don't use the scanf strategy after all, because incomplete sequences written
-to consoles will just be shown raw. to do what every modern terminal (emulator) does,
-we need to implement a state machine with a buffer.
-
-as an example:
-run `cat`, then press the Esc and Enter keys on your keyboard. this does three things:
-1. '\e' is added to cat's input buffer
-2. your terminal reacts to Enter and moves the cursor to the next line
-3. cat sends its input buffer (containing "\e\n" in C string format) to stdout,
-   causing your terminal to:
-   1. recognize the start of an escape sequence (\e)
-   2. move the cursor to the next line (again) (\n)
-then type "[36m" without the quotes. on my terminal emulator (foot), the "[36m"
-was never shown, and everything i typed afterwards was cyan in color. my terminal
-emulator let the \n go through without printing the \e, meaning it did in fact
-store the \e in a buffer, or set a flag indicating that "i should check for the rest
-of the escape sequence", then processed the "[36m", setting the color to cyan.
-
-we should recreate this strategy here as well to handle cases where not all of an
-escape sequence is passed to a single con_write() call.
-
-not to mention: "\e[" is just one type of sequence (known as a control sequence introducer,
-or CSI), but there are also "\e " sequences as well which can do other things. a state
-machine would help here.
-*/
+// #include <string.h>
 
 static void updateColorBright(const int param, int *const color, int *const bgcolor, int *const bright) {
 	if (param == 0) { // Reset
@@ -74,7 +47,7 @@ static void updateColorBright(const int param, int *const color, int *const bgco
 	}
 }
 
-static void consoleParseColor(const char *escapeseq, int escapelen) {
+static void consoleParseColor(const char *escapeseq) {
 	if (!currentConsole)
 		return;
 
@@ -151,88 +124,130 @@ static void consoleParseColor(const char *escapeseq, int escapelen) {
 		currentConsole->fontCurPal2 = bgcolor << 12;
 }
 
-int consoleParseEscapeSequence(const char *ptr, int len) {
-	char chr;
-	const char *escapeseq = ptr;
-	int escapelen = 0;
-	int parameter;
+static void consoleParseCsiSequence(void) {
+	PrintConsole *const c = currentConsole;
+	const char *const seq = c->escBuf + 2; // Skip "\e["
+	const int len = c->escBufLen;
 
-	do {
-		chr = *(ptr++);
-		escapelen++;
+	// The last character decides the function of the sequence
+	const char command = c->escBuf[c->escBufLen - 1];
 
-		switch (chr) {
-		// Private modes - commonly end in 'h' or 'l'. We won't implement any (yet), so just consume them.
-		case 'h':
-		case 'l':
-			return escapelen;
+	switch (command) {
+	// Private modes - commonly end in 'h' or 'l'. We don't implement any (yet), so just consume them.
+	case 'h':
+	case 'l':
+		break;
 
-		// Cursor directional movement
-		case 'A':
-			if (siscanf(escapeseq, "%dA", &parameter) < 1)
-				parameter = 1;
-			consoleMoveCursorY(-parameter);
-			return escapelen;
+	// Move cursor up
+	case 'A': {
+		int dy = 1;
+		siscanf(seq, "%dA", &dy);
+		consoleMoveCursorY(-dy);
+		break;
+	}
 
-		case 'B':
-			if (siscanf(escapeseq, "%dB", &parameter) < 1)
-				parameter = 1;
-			consoleMoveCursorY(parameter);
-			return escapelen;
+	// Move cursor down
+	case 'B': {
+		int dy = 1;
+		siscanf(seq, "%dB", &dy);
+		consoleMoveCursorY(dy);
+		break;
+	}
 
-		case 'C':
-			if (siscanf(escapeseq, "%dC", &parameter) < 1)
-				parameter = 1;
-			consoleMoveCursorX(parameter);
-			return escapelen;
+	// Move cursor right
+	case 'C': {
+		int dx = 1;
+		siscanf(seq, "%dC", &dx);
+		consoleMoveCursorX(dx);
+		break;
+	}
 
-		case 'D':
-			if (siscanf(escapeseq, "%dD", &parameter) < 1)
-				parameter = 1;
-			consoleMoveCursorX(-parameter);
-			return escapelen;
+	// Move cursor left
+	case 'D': {
+		int dx = 1;
+		siscanf(seq, "%dD", &dx);
+		consoleMoveCursorX(-dx);
+		break;
+	}
 
-		// Cursor position movement
-		case 'H':
-		case 'f': {
-			int x, y;
-			if (siscanf(escapeseq, "%d;%d", &y, &x) == 2)
-				consoleSetCursorPos(x, y);
-			else
-				consoleSetCursorPos(0, 0);
-			return escapelen;
+	// Set cursor position
+	case 'H':
+	case 'f': {
+		int x, y;
+		if (siscanf(seq, "%d;%d", &y, &x) == 2)
+			consoleSetCursorPos(x, y);
+		else
+			consoleSetCursorPos(0, 0);
+		break;
+	}
+
+	// Screen clear
+	case 'J':
+		consoleCls(seq[len - 2]);
+		break;
+
+	// Line clear
+	case 'K':
+		consoleClearLine(seq[len - 2]);
+		break;
+
+	// Save cursor position
+	case 's':
+		c->prevCursorX = c->cursorX;
+		c->prevCursorY = c->cursorY;
+		break;
+
+	// Load cursor position
+	case 'u':
+		consoleSetCursorPos(c->prevCursorX, c->prevCursorY);
+		break;
+
+	// Color/style modes
+	case 'm':
+		consoleParseColor(seq);
+		break;
+	}
+}
+
+static void dumpAndResetEscBuf(void) {
+	PrintConsole *const c = currentConsole;
+	for (int i = 0; i < c->escBufLen; i++)
+		consolePrintChar(c->escBuf[i]);
+	c->escBufLen = 0;
+}
+
+void consoleUpdateEscapeSequence(const char ch) {
+	PrintConsole *const c = currentConsole;
+
+	if (!c)
+		return;
+
+	if (ch == '\e') {
+		// We're most likely supposed to start buffering a new sequence.
+		dumpAndResetEscBuf();
+	}
+
+	// Append to buffer
+	c->escBuf[c->escBufLen++] = ch;
+	c->escBuf[c->escBufLen] = '\0'; // just to be safe
+
+	// Do we only have an escape in the buffer?
+	if (c->escBufLen == 1 && c->escBuf[0] == '\e')
+		// Don't continue, we don't want to dump the buffer now.
+		return;
+
+	// Do we have a CSI at the beginning of the buffer?
+	if (c->escBuf[0] == '\e' && c->escBuf[1] == '[') {
+		// Did we just form a full sequence? The sequences we parse all end in alphabetical characters.
+		if (isalpha(ch)) {
+			consoleParseCsiSequence();
+			c->escBufLen = 0;
 		}
+	} else {
+		dumpAndResetEscBuf();
+	}
 
-		// Screen clear
-		case 'J':
-			consoleCls(escapeseq[escapelen - 2]);
-			return escapelen;
-
-		// Line clear
-		case 'K':
-			consoleClearLine(escapeseq[escapelen - 2]);
-			return escapelen;
-
-		// Save cursor position
-		case 's':
-			currentConsole->prevCursorX = currentConsole->cursorX;
-			currentConsole->prevCursorY = currentConsole->cursorY;
-			return escapelen;
-
-		// Load cursor position
-		case 'u':
-			// currentConsole->cursorX = currentConsole->prevCursorX;
-			// currentConsole->cursorY = currentConsole->prevCursorY;
-			consoleSetCursorPos(currentConsole->prevCursorX, currentConsole->prevCursorY);
-			return escapelen;
-
-		// Color/style modes
-		case 'm':
-			consoleParseColor(escapeseq, escapelen);
-			return escapelen;
-		}
-	} while (escapelen < len);
-
-	// reached end of buffer! tell con_write to NOT add to its counter.
-	return 0;
+	if (c->escBufLen >= sizeof(c->escBuf) - 1)
+		// Escape sequences shouldn't be this long.
+		dumpAndResetEscBuf();
 }

@@ -39,45 +39,51 @@ distribution.
 #include "console-priv.h"
 
 
-PrintConsole defaultConsole =
-{
-	//Font:
-	{
-		(u16*)default_font_bin, //font gfx
-		0, //font palette
-		0, //font color count
-		1, //bpp
-		0, //first ascii character in the set
-		256, //number of characters in the font set
-		true //convert single color
+const PrintConsole defaultConsole = {
+	.font = {
+		.gfx = (u16*)default_font_bin,
+		.pal = 0,
+		.numColors = 0,
+		.bpp = 1,
+		.asciiOffset = 0,
+		.numChars = 256,
+		.convertSingleColor = true
 	},
-	0, //font background map
-	0, //font background gfx
-	22, //map base
-	3, //char base
-	0, //bg layer in use
-	-1, //bg id
-	0,0, //cursorX cursorY
-	0,0, //prevcursorX prevcursorY
-	32, //console width
-	24, //console height
-	0,  //window x
-	0,  //window y
-	32, //window width
-	24, //window height
-	3, //tab size
-	0, //font character offset
-	0, //selected palette
-	0,  //print callback
-	false, //console initialized
-	true, //load graphics
+	.fontBgMap = 0,
+	.fontBgGfx = 0,
+	.mapBase = 22,
+	.gfxBase = 3,
+	.bgLayer = 0,
+	.bgId = -1,
+	.cursorX = 0,
+	.cursorY = 0,
+	.prevCursorX = 0,
+	.prevCursorY = 0,
+	.consoleWidth = 32,
+	.consoleHeight = 24,
+	.windowX = 0,
+	.windowY = 0,
+	.windowWidth = 32,
+	.windowHeight = 24,
+	.tabSize = 3,
+	.fontCharOffset = 0,
+	.fontCurPal = 0,
+	.PrintChar = NULL,
+	.consoleInitialised = false,
+	.loadGraphics = true,
+	.bg2Id = -1,
+	.fontBg2Map = NULL,
+	.fontBg2Gfx = NULL,
+	.fontCurPal2 = 0,
+	.escBuf = {},
+	.escBufLen = 0
 };
 
 PrintConsole currentCopy;
 
 PrintConsole* currentConsole = &currentCopy;
 
-PrintConsole* consoleGetDefault(void){return &defaultConsole;}
+const PrintConsole* consoleGetDefault(void){return &defaultConsole;}
 
 
 //---------------------------------------------------------------------------------
@@ -163,42 +169,19 @@ ssize_t nocash_write(struct _reent *r, void *fd, const char *ptr, size_t len) {
 	return len;
 }
 
+ssize_t con_write(struct _reent *r, void *fd, const char *ptr, size_t len) {
+	if (!ptr || len <= 0)
+		return -1;
 
-//---------------------------------------------------------------------------------
-ssize_t con_write(struct _reent *r,void *fd,const char *ptr, size_t len) {
-//---------------------------------------------------------------------------------
-
-	char chr;
-
-	int i, count = 0;
-	char *tmp = (char*)ptr;
-
-	if(!tmp || len<=0) return -1;
-
-	i = 0;
-
-	while(i<len) {
-
-		chr = *(tmp++);
-		i++; count++;
-
-		if ( chr == 0x1b && *tmp == '[' && i < len ) {
-			// skip the '['
-			tmp++; i++; count++;
-			// len - i: the REMAINING length in the buffer
-			int consumed = consoleParseEscapeSequence(tmp, len - i);
-			if (consumed > 0) {
-				tmp += consumed;
-				i += consumed;
-				count += consumed;
-				continue;
-			}
-		}
-
-		consolePrintChar(chr);
+	for (size_t i = 0; i < len; ++i) {
+		const char chr = ptr[i];
+		if (chr == '\e' || currentConsole->escBufLen > 0)
+			consoleUpdateEscapeSequence(chr);
+		else
+			consolePrintChar(chr);
 	}
 
-	return count;
+	return len;
 }
 
 static const devoptab_t dotab_stdout = {
@@ -406,6 +389,7 @@ PrintConsole* consoleInit(PrintConsole* console, int layer,
 		console->fontBg2Map = bgGetMapPtr(console->bg2Id);
 	}
 
+	console->escBufLen = 0;
 	console->consoleInitialised = 1;
 
 	consoleCls('2');
